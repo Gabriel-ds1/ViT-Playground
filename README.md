@@ -141,7 +141,7 @@ class TrainViTConfig:
 
 #### Token Attention Map
 
-![token-attn](https://i.imgur.com/kksexRn.gif)
+![token-attn](https://i.imgur.com/WuvVui4.gif)
 
 #### CLS Attention Map
 
@@ -150,7 +150,7 @@ class TrainViTConfig:
 
 #### Attention Hook Output
 
-![attn-hook](https://i.imgur.com/qYWZNPN.gif)
+![attn-hook](https://i.imgur.com/EwYvZgy.gif)
 
 ---
 
