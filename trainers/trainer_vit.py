@@ -187,8 +187,6 @@ class TrainerViT:
 
         state = checkpoint["model_state_dict"]
         self.model.load_state_dict(state, strict=False)
-        #self.logger.info(f"Loaded with missing keys:", {missing})
-        #self.logger.info(f"Ignored unexpected keys:", {unexpected})
         self.optimizer.load_state_dict(checkpoint["optimizer_state_dict"])
         self.scheduler.load_state_dict(checkpoint["scheduler_state_dict"])
     
