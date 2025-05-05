@@ -53,11 +53,12 @@ This project is a custom implementation of the Vision Transformer (ViT) architec
 **Custom Analysis and Debugging Tools:**  
 _Get a peek inside the ViT! All visualizations are automatically generated and can be toggled via config._
 
-| Visualization Type       | Description                                                                      |
-| ------------------------ | -------------------------------------------------------------------------------- |
-| **Token Attention Maps** | View which patches the model focuses on                                          |
-| **CLS Heatmap**          | Heatmap of the CLS token for interpretability                                    |
-| **Attention Hooks**      | Inspect patch projections, pre/post-norm, attention out from blocks 1, 6, and 11 |
+| Visualization Type               | Description                                                                      |
+| -------------------------------- | -------------------------------------------------------------------------------- |
+| **Token Attention Maps**         | View which patches the model focuses on                                          |
+| **CLS Heatmap**                  | Heatmap of the CLS token for interpretability                                    |
+| **CLS Dimensionality Reduction** | CLS Token Dimensionality Reduction per class                                     |
+| **Attention Hooks**              | Inspect patch projections, pre/post-norm, attention out from blocks 1, 6, and 11 |
 
 _Note: CLS-dimensionality reduction visualizations are omitted here due to current limitations. I am actively working to improve this!_
 
