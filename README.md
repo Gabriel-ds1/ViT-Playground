@@ -1,8 +1,8 @@
 ---
-## [![Project Banner](https://i.imgur.com/Xehvx5T.png)](#)
+## [![Project Banner](assets/banner.png)](#)
 ---
 
-## Vision Transformer (ViT) on CIFAR-100
+## Vision Transformer (ViT) Playground
 
 > **A complete ViT implementation, from scratch, with advanced visualizations and flexible training**
 
@@ -10,7 +10,7 @@
 
 ### 🚀 Project Overview
 
-This project is a custom implementation of the Vision Transformer (ViT) architecture, built and trained on CIFAR-100.  
+This project is a custom implementation of the Vision Transformer (ViT) architecture with several visualizations for analyzing activations throughout the architecture, built and trained on CIFAR-100.  
 **Major features:**
 
 - Custom ConvStem, Patch Embeddings, MSA, Transformer block, and CLS patch.
@@ -34,7 +34,7 @@ This project is a custom implementation of the Vision Transformer (ViT) architec
   - CLS Token for whole-image classification
 - **Loss:** CrossEntropyLoss
 - **Optimizer:** AdamW (with weight decay)
-- **Scheduler:** CosineAnnealingLR
+- **Scheduler:** CosineAnnealingLR with Warmup
 - **Early Stopping:** If no improvement over 20 epochs
 
 ---
@@ -46,9 +46,10 @@ _Get a peek inside the ViT! All visualizations are automatically generated and c
 
 | Visualization Type               | Description                                                                      |
 | -------------------------------- | -------------------------------------------------------------------------------- |
-| **Token Attention Maps**         | View which patches the model focuses on                                          |
-| **CLS Heatmap**                  | Heatmap of the CLS token for interpretability                                    |
-| **CLS Dimensionality Reduction** | CLS Token Dimensionality Reduction per class                                     |
+| **CLS <-> Token Attention**      | CLS-centric attention map as a line plot                                         |
+| **CLS Heatmap**                  | Heatmap of the CLS token embeddings for interpretability                         |
+| **CLS Dimensionality Reduction** | UMap 2D projections of CLS embeddings per class                                  |
+| **Self Attention Heads Heatmap** | All attention heads heatmap in a single grid                                     |
 | **Attention Hooks**              | Inspect patch projections, pre/post-norm, attention out from blocks 1, 6, and 11 |
 
 ---
