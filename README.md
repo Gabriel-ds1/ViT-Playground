@@ -1,5 +1,5 @@
 ---
-## [![Project Banner](assets/banner.png)](#)
+## [![Project Banner](assets/banner_1.png)](#)
 ---
 
 ## Vision Transformer (ViT) Playground
