@@ -19,17 +19,8 @@ This project is a custom implementation of the Vision Transformer (ViT) architec
 - Support for both **Weights & Biases** and **TensorBoard** logging.
 - Mixed-precision training (AMP) for efficiency.
 - Resume and checkpoint options for robust training workflows.
-
----
-
-### ✨ Results
-
-- **Dataset:** CIFAR-100
-- **Train Accuracy:** 90.19%
-- **Validation Accuracy:** 60.97%  
-  _Model trained for 200 epochs. Validation performance did not reach global minimum yet and most likely will improve with prolonged training._
-
----
+- Dataset 'Mixup' and 'Cutmix' preprocessing
+- Scheduler warmup phase
 
 ### 🧩 Model Architecture
 
@@ -60,7 +51,30 @@ _Get a peek inside the ViT! All visualizations are automatically generated and c
 | **CLS Dimensionality Reduction** | CLS Token Dimensionality Reduction per class                                     |
 | **Attention Hooks**              | Inspect patch projections, pre/post-norm, attention out from blocks 1, 6, and 11 |
 
-_Note: CLS-dimensionality reduction visualizations are omitted here due to current limitations. I am actively working to improve this!_
+---
+
+### 📚 Sample Visualizations
+
+#### CLS <-> Token Attention
+
+![attn-from-cls](assets/attn_from_cls.gif)
+![attn-to-cls](assets/attn_to_cls.gif)
+
+#### CLS Dimensionality Reduction
+
+![cls-heatmaps](assets/cls_dim_reduction.png)
+
+#### CLS Heatmaps
+
+![cls-heatmaps](assets/cls_heatmaps.gif)
+
+#### Self Attention Heads Heatmap
+
+![cls-heatmaps](assets/attn_heads.gif)
+
+#### Hook Attention Maps
+
+![cls-heatmaps](assets/hook_attn_maps.gif)
 
 ---
 
@@ -81,7 +95,7 @@ class TrainViTConfig:
     # Optimizer & scheduler
     lr: float = 3e-4
     weight_decay: float = 0.05
-    cosine_eta_min: float = 1e-4
+    eta_min: float = 1e-4
     early_stopping: int = 20
 
     # Model architecture
@@ -96,10 +110,10 @@ class TrainViTConfig:
 
     # Logging & visualization
     project_name: str = "vit-cifar100"
-    vit_visualizers: List[str] = field(default_factory=lambda: ["token_attn_maps", "cls_heatmap", "hooks"])
+    vit_visualizers: List[str] = field(default_factory=lambda: ["token_attn_maps", "cls_heatmap", "cls_dim_reduction", "hooks"])
     visualize_every_n_epochs: int = 10
     visualize_layers: List[int] = field(default_factory=lambda:[0, 6, 11])
-    save_npy: bool = True
+    save_npy: bool = False
     log_backend: str = "both"  # Options: 'wandb', 'tensorboard', 'both', ''
 
     # Checkpointing
@@ -134,23 +148,6 @@ class TrainViTConfig:
    ```bash
    python main.py
    ```
-
----
-
-### 📚 Sample Visualizations
-
-#### Token Attention Map
-
-![token-attn](https://i.imgur.com/WuvVui4.gif)
-
-#### CLS Attention Map
-
-![attn-from-cls](https://i.imgur.com/aZbLFr3.png)
-![attn-to-cls](https://i.imgur.com/ymuDxWQ.png)
-
-#### Attention Hook Output
-
-![attn-hook](https://i.imgur.com/EwYvZgy.gif)
 
 ---
 

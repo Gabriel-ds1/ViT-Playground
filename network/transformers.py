@@ -96,8 +96,6 @@ class TransformerEncoderBlock(nn.Module):
         self.drop_path = DropPath(drop_path_prob) if drop_path_prob > 0.0 else nn.Identity()
         self.norm2 = nn.LayerNorm(embed_dim)
         hidden_dim = int(embed_dim * mlp_ratio)
-        # ResNet
-        #self.resnet = ResNet(in_features=embed_dim, hidden_dim=hidden_dim)
         self.mlp = nn.Sequential(nn.Linear(embed_dim, hidden_dim), 
                                  nn.LayerNorm(hidden_dim),
                                  nn.SiLU(),
@@ -116,8 +114,6 @@ class TransformerEncoderBlock(nn.Module):
         x = x + self.drop_path(attn_out) # x + (normalize x and apply multi head attention into placeholder drop_path)
         # 2) MLP block with pre-norm + residual + (stochastic) drop-path (adding x (x + ..) makes this residual)
         x = x + self.drop_path(self.mlp(self.norm2(x))) # ^^^x + (normalize x and apply MLP into placeholder drop_path)
-        x = x + self.drop_path(x)
-
         if return_attn:
             return x, attn_map
         return x
@@ -223,6 +219,20 @@ class ViT(nn.Module):
                 - If neither optional flag is set: returns only the final tokens.
                 - If return_attn and/or return_tokens are True: returns (final_tokens, [...attn_maps...], [...tokens...]).
         """
+        # token_seqs structure:
+        # [0]: after patch embedding
+        # [1]: after pos_embed+dropout
+        # [2]: after block 0
+        # ...
+        # [N]: after final block (depth-1)
+        # [N+1]: after final LayerNorm
+
+        # ----- attn_maps list structure -----
+        # attn_maps[0]: attention from Transformer block 0
+        # attn_maps[1]: attention from Transformer block 1
+        # ...
+        # attn_maps[depth-1]: attention from last Transformer block (block depth-1)
+        # these are only for the transformer's main blocks.
 
         all_tokens = []
         all_attn_maps = [] # collect attention maps if needed

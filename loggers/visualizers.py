@@ -3,7 +3,7 @@ import numpy as np
 import re
 import wandb
 import shutil
-from sklearn.manifold import TSNE
+import umap.umap_ as umap
 from sklearn.decomposition import PCA
 import matplotlib.pyplot as plt
 from torch.utils.tensorboard import SummaryWriter
@@ -97,6 +97,18 @@ class ViTVisualizer:
         epoch (int): Current epoch (for file naming).
         save_npy (bool, optional): Whether to export visualizations as .npy arrays.
     """
+    # token_seqs list structure:
+    # [0]: after patch embedding (CLS first index)
+    # [1]: after pos_embed + dropout
+    # [2]: after transformer block 0
+    # ...
+    # [depth]: after transformer block (depth-1)
+    # [depth+1] or [-1]: after final LayerNorm (final model output before head)
+    #
+    # To get CLS token for a BLOCK, use:
+    #   CLS = token_seqs[block_idx + 1][:, 0, :]
+    # To get the FINAL CLS token (post-norm), use:
+    #   CLS = token_seqs[-1][:, 0, :]
 
     def __init__(self, model, depth, filepath, epoch, save_npy=False):
         self.model = model
@@ -124,7 +136,7 @@ class ViTVisualizer:
             cls_to_save_path = get_viz_save_path(base_dir=self.filepath, category='cls_attention', layer_idx=layer_idx, epoch=self.epoch, to_cls=True)
             token_attention_save_path = get_viz_save_path(base_dir=self.filepath, category='token_attention', layer_idx=layer_idx, epoch=self.epoch)
             # attn_maps has shape [layer, batch, heads, tokens, tokens]
-            block = attn_maps[layer_idx][0] # grab all heads and the first image in batch
+            block = attn_maps[layer_idx][:4].mean(dim=0) # grab all heads and the first image in batch
             # save
             save_cls_attention(f"layer{layer_idx}_att_FROM_cls", block, filepath=cls_from_save_path, epoch=self.epoch, to_cls=False)
             save_cls_attention(f"layer{layer_idx}_att_TO_cls", block, filepath=cls_to_save_path, epoch=self.epoch, to_cls=True)
@@ -138,7 +150,7 @@ class ViTVisualizer:
             token_seqs (list[Tensor]): Transformer token sequences at each layer.
             labels (Tensor): Class labels for the batch.
             cls_heatmap (bool): If True, generate CLS heatmaps.
-            cls_dim_reduction (bool): If True, generate t-SNE/UMAP projections of CLS tokens.
+            cls_dim_reduction (bool): If True, generate UMAP projections of CLS tokens.
             layers (list[int], optional): Layer indices to use.
         """
         # if no layers provided, auto select first, middle and last layer
@@ -150,7 +162,9 @@ class ViTVisualizer:
             cls_heatmaps_save_path = get_viz_save_path(base_dir=self.filepath, category='cls_heatmap', layer_idx=layer_idx, epoch=self.epoch)
             dim_reduction_save_path = get_viz_save_path(base_dir=self.filepath, category='cls_dim_reduction', layer_idx=layer_idx, epoch=self.epoch)
             # token_seqs[layer_idx]: (B, N, D), CLS is token 0
-            cls_embeds = token_seqs[layer_idx][:, 0, :] # -> (B, D)
+            #actual_layer_idx = layer_idx + 1  # offset due to patch_embed + pos_embed
+            cls_embeds = token_seqs[-1][:, 0, :]
+            #dim_red_cls_embeds = token_seqs[actual_layer_idx][:, 0, :]
             # save
             if cls_heatmap:
                 save_cls_heatmaps(cls_embeds, labels, layer_idx, filepath=cls_heatmaps_save_path, epoch=self.epoch)
@@ -243,6 +257,7 @@ def save_cls_attention(name, attn_map, filepath, epoch, to_cls=False):
     plt.ylabel("Attention weight")
     plt.grid(True)
     plt.tight_layout()
+    plt.figtext(0.5, -0.05, "Mean attention across 4 samples", ha='center', fontsize=9)
     plt.savefig(filepath, dpi=150)
     plt.close()
 
@@ -255,6 +270,7 @@ def save_cls_attention(name, attn_map, filepath, epoch, to_cls=False):
         plt.ylabel("Attention weight")
         plt.grid(True)
         plt.tight_layout()
+        plt.figtext(0.5, -0.05, "Mean attention across 4 samples", ha='center', fontsize=9)
         plt.savefig(filepath, dpi=150)
         plt.close()
     
@@ -272,6 +288,11 @@ def save_cls_heatmaps(cls_embeds, labels, layer_idx, filepath, epoch):
 
     data = cls_embeds.cpu().detach().numpy() if cls_embeds.device.type != "cpu" else cls_embeds.detach().numpy()
     labels = labels.cpu().detach().numpy() if hasattr(labels, 'cpu') else np.array(labels)
+
+    if len(np.unique(labels)) > 1:  # Only sort if more than one class, to avoid no-op
+        order = np.argsort(labels)
+        data = data[order]
+        labels = labels[order]
 
     # set up plot
     fig, axes = plt.subplots(figsize=(12, 6))
@@ -298,7 +319,7 @@ def save_cls_heatmaps(cls_embeds, labels, layer_idx, filepath, epoch):
 
 def save_cls_dim_reduction(cls_embeds, labels, layer_idx, filepath, epoch):
     """
-    Saves a t-SNE 2D projection of CLS embeddings with clustering metrics in the title.
+    Saves a uMap 2D projection of CLS embeddings with clustering metrics in the title.
     
     Args:
         cls_embeds (Tensor or np.ndarray): CLS embeddings, shape (batch, dim).
@@ -307,10 +328,11 @@ def save_cls_dim_reduction(cls_embeds, labels, layer_idx, filepath, epoch):
         filepath (str or Path): Destination file path for saving the heatmap image.
         epoch (int): Current training epoch (for annotation purposes).
     """
-
+    
     # cls_embeds should be (B, D)
     data = cls_embeds.cpu().detach().numpy() if cls_embeds.device.type != "cpu" else cls_embeds.detach().numpy()
     n_samples = data.shape[0]
+    assert cls_embeds.shape[0] == labels.shape[0], "Batch dim mismatch between CLS tokens and labels!"
     
     # Labels should be (B,)
     label_data = labels.cpu().detach().numpy() if hasattr(labels, 'cpu') else np.array(labels)
@@ -319,23 +341,21 @@ def save_cls_dim_reduction(cls_embeds, labels, layer_idx, filepath, epoch):
     if n_samples < 4 or len(np.unique(label_data)) < 2:
         print("batch size must be greater than 2 and have more than one class to plot CLS dimensionality reduction visualization")
         return None
-    # choose perplexity = min(25, n_samples-1), but at least 2
-    perplexity = max(2, min(25, n_samples-1))
 
     pca = PCA(n_components=50)
     data_reduced = pca.fit_transform(data)
 
-    # set up t-SNE projection
-    z = TSNE(n_components=2, init='pca', random_state=42, perplexity=perplexity).fit_transform(data_reduced)  # (N+1, 2)
+    # set up uMap projection
+    z = umap.UMAP(n_components=2, random_state=42).fit_transform(data_reduced) # (N+1, 2)
 
     # check for degenerate output
     if np.std(z[:, 0]) < 1e-5 or np.std(z[:, 1]) < 1e-5:
-        print("Degenerate t-SNE output (collapse to line/point), skipping plot.")
+        print("Degenerate uMap output (collapse to line/point), skipping plot.")
         return None
     
     fig, axes = plt.subplots(figsize=(6,6))
     axes.scatter(z[:,0], z[:,1], c=label_data, cmap='tab20', s=30)
-    axes.set_title(f"t-SNE tokens @ layer {layer_idx} (epoch {epoch})\n")
+    axes.set_title(f"uMap tokens @ layer {layer_idx} (epoch {epoch})\n")
     fig.text(0.5, 0.02, "Each color represents a class (e.g. dog, cat)", ha="center", va="bottom", fontsize=10)
     plt.tight_layout(rect=[0, 0.03, 0.75, 1])
     plt.savefig(filepath, bbox_inches="tight", dpi=150)
@@ -394,7 +414,7 @@ def save_hooks_attention(hooks_dict, filepath, summarize_batch=False):
     plt.savefig(filepath, dpi=150, bbox_inches="tight")
     plt.close()
 
-def collect_diverse_val_batch(val_loader, num_classes=100, samples_per_class=5):
+def collect_diverse_val_batch(val_loader, num_classes=100, samples_per_class=5, seed=42):
     """
     Collect a batch of images from the validation loader, containing up to N images per class.
 

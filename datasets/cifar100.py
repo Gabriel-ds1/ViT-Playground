@@ -2,6 +2,7 @@ import numpy as np
 import torch
 from torchvision import datasets, transforms
 from torch.utils.data import Subset
+from torchvision.transforms import AutoAugment, AutoAugmentPolicy
 
 def get_cifar100_datasets(data_dir: str = './data', val_split: float = 0.1):
     """
@@ -22,12 +23,11 @@ def get_cifar100_datasets(data_dir: str = './data', val_split: float = 0.1):
     # Data augmentations for training
     train_transform = transforms.Compose([transforms.RandomCrop(32, padding=4),
                                           transforms.RandomHorizontalFlip(),
-                                          transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.4, hue=0.1),
-                                          transforms.RandomGrayscale(p=0.1),
+                                          transforms.AutoAugment(policy=AutoAugmentPolicy.CIFAR10),
                                           transforms.ToTensor(),
                                           transforms.Normalize(mean, std),
                                           # cutout-like augmentation
-                                          transforms.RandomErasing(p=0.1, scale=(0.02, 0.33), ratio=(0.3, 3.3), value='random')])
+                                          transforms.RandomErasing(p=0.2, scale=(0.02, 0.33), ratio=(0.3, 3.3), value='random')])
     
     # Normalization for validation/testing
     test_transform = transforms.Compose([transforms.ToTensor(), transforms.Normalize(mean, std)])

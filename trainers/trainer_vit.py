@@ -8,13 +8,15 @@ from pathlib import Path
 import zipfile
 import torch.nn as nn
 import torch.optim as optim
-from torch.optim.lr_scheduler import CosineAnnealingLR
+from transformers import get_cosine_schedule_with_warmup
 from torch.amp import GradScaler, autocast
 from dataclasses import fields
 from datasets.loaders import get_cifar100_dataloaders
 from datasets.cifar100 import unnormalize
+from datasets.mixup import mixup_data
 from network.transformers import ViT
 from network import utils
+from network.scheduler import RescaledScheduler
 from utils.common_utils import create_checkpoint_path
 from loggers.log import setup_logger
 from loggers.visualizers import BackendVisualizer, ViTVisualizer, collect_diverse_val_batch, save_visualization_zip, get_latest_viz_zip
@@ -105,7 +107,7 @@ class TrainerViT:
         self.train_loader, self.val_loader, self.test_loader = get_cifar100_dataloaders(data_dir=self.data_dir, batch_size=self.batch_size, 
                                                                                         val_split=self.val_split)
         # Collect diverse labels and samples for t-sne visualization
-        diverse_images, diverse_labels = collect_diverse_val_batch(self.val_loader, num_classes=100, samples_per_class=2) # Stack to make a batch, using 100 classes for CIFAR-100
+        diverse_images, diverse_labels = collect_diverse_val_batch(self.val_loader, num_classes=100, samples_per_class=4) # Stack to make a batch, using 100 classes for CIFAR-100
         self.diverse_val_batch = (torch.cat(diverse_images, 0), torch.tensor(diverse_labels))
         
     def setup_backend_visualization(self):
@@ -157,10 +159,14 @@ class TrainerViT:
                          num_heads=self.num_heads, mlp_ratio=self.mlp_ratio, drop_rate=self.drop_rate, attn_drop_rate=self.attn_drop_rate, use_conv_stem=True, conv_stem_dim=64).to(self.device)
         
         # Loss, optimizer, scheduler
-        self.criterion = nn.CrossEntropyLoss()
+        self.criterion = nn.CrossEntropyLoss(label_smoothing=0.05)
         self.optimizer = optim.AdamW(self.model.parameters(), lr=self.lr, weight_decay=self.weight_decay)
-        # Reduce LR when validation loss plateaus
-        self.scheduler = CosineAnnealingLR(self.optimizer, T_max=self.epochs, eta_min=self.cosine_eta_min)
+
+        total_steps = len(self.train_loader) * self.epochs
+        warmup_steps = int(0.05 * total_steps) # 5% warm-up
+
+        base_scheduler = get_cosine_schedule_with_warmup(self.optimizer, num_warmup_steps=warmup_steps, num_training_steps=total_steps, num_cycles=0.5)
+        self.scheduler = RescaledScheduler(base_scheduler, initial_lr=self.lr, eta_min = self.eta_min)
     
     def resume_training(self):
         """
@@ -172,7 +178,7 @@ class TrainerViT:
         self.setup_dataloaders()
         self.setup_model()
 
-        checkpoint = torch.load(self.resume_checkpoint_path, map_location=self.device)
+        checkpoint = torch.load(self.resume_checkpoint_path, map_location=self.device, weights_only=False)
 
         # load in visualizations checkpoint
         if self.vit_visualizers:
@@ -237,31 +243,43 @@ class TrainerViT:
             # Batch Training
             num_batches = len(self.train_loader)
             for batch_idx, (image, labels) in enumerate(self.train_loader, start=1):
+
                 print(f"[Epoch {epoch}] Batch {batch_idx}/{num_batches} — training…")
                 image = image.to(self.device)
                 labels = labels.to(self.device)
+
+                # Apply Mixup to batch
+                mixed_inputs, targets_a, targets_b, lam = mixup_data(image, labels, alpha=0.2, device=self.device)
 
                 self.optimizer.zero_grad() # zero out gradients before new backward pass
 
                 if self.use_amp: # Use mixed-precision if arg is set
                     with autocast(str(self.device)):
-                        outputs, attn_maps = self.model(image, return_attn=True)
-                        loss = self.criterion(outputs, labels)
+                        outputs = self.model(mixed_inputs)
+                        loss = lam * self.criterion(outputs, targets_a) + (1 - lam) * self.criterion(outputs, targets_b)
                     # scale, backward, step, update
                     self.scalar.scale(loss).backward()
                     self.scalar.step(self.optimizer)
                     self.scalar.update()
+                    self.scheduler.step()
                 else:
                     # Else use vanilla FP32
-                    outputs, attn_maps = self.model(image, return_attn=True)
-                    loss = self.criterion(outputs, labels)
+                    outputs = self.model(mixed_inputs)
+                    loss = lam * self.criterion(outputs, targets_a) + (1 - lam) * self.criterion(outputs, targets_b)
                     loss.backward()
                     self.optimizer.step()
+                    self.scheduler.step()
 
                 train_running_loss += loss.item() * image.size(0) # running loss = train_running_loss + loss * batch_size. --.item() converts tensor to true value
                 _, preds = outputs.max(dim=1)
-                correct_samples += preds.eq(labels).sum().item() # correct_samples = correct_samples + (true(1), false(0), true(1), true(0)).sum()
-                total_samples += labels.size(0) # total_samples = total_samples + labels batch_size
+                correct_a = preds.eq(targets_a).sum().item()
+                correct_b = preds.eq(targets_b).sum().item()
+                mixed_acc  = lam * correct_a + (1 - lam) * correct_b
+                correct_samples += mixed_acc
+                total_samples   += labels.size(0)
+                #_, preds = outputs.max(dim=1)
+                #correct_samples += preds.eq(targets_a).sum().item() # correct_samples = correct_samples + (true(1), false(0), true(1), true(0)).sum()
+                #total_samples += labels.size(0) # total_samples = total_samples + labels batch_size
 
             train_loss = train_running_loss / total_samples
             train_acc = correct_samples / total_samples * 100.0
@@ -281,10 +299,10 @@ class TrainerViT:
 
                     if self.use_amp: # Use mixed-precision if arg is set
                         with autocast(str(self.device)):
-                            outputs, attn_maps = self.model(image, return_attn=True)
+                            outputs = self.model(image)
                             loss = self.criterion(outputs, labels)
                     else: # Else use vanilla FP32
-                        outputs, attn_maps = self.model(image, return_attn=True)
+                        outputs = self.model(image)
                         loss = self.criterion(outputs, labels)
 
                     val_running_loss += loss.item() * image.size(0) # running loss = val_running_loss + loss * batch_size. --.item() converts tensor to true value
@@ -296,10 +314,10 @@ class TrainerViT:
             val_acc = correct_val / val_total_samples * 100.0
 
             # Adjust learning rate based on validation loss
-            self.scheduler.step()
+            #self.scheduler.step()
 
             # Logging
-            log_dict = {"epoch": epoch, "train_loss": train_loss, "train_acc": train_acc, "val_loss": val_loss, "val_acc": val_acc, "learning_rate": self.scheduler.get_last_lr()[0]}
+            log_dict = {"epoch": epoch, "train_loss": train_loss, "train_acc": train_acc, "val_loss": val_loss, "val_acc": val_acc, "learning_rate": self.scheduler.get_lr()[0]}
             
             self.backend_vis.log_scalars(log_dict, step=epoch)
 
@@ -308,7 +326,7 @@ class TrainerViT:
                 unnormed = unnormalize(sample_batch_tensor[:16])
                 self.backend_vis.log_images("Sample images", unnormed, step=epoch)
 
-            self.logger.info(f'Epoch {epoch:>2}/{self.epochs:>2} | Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.2f}%, LR: {self.scheduler.get_last_lr()[0]:.6f} | Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.2f}%')
+            self.logger.info(f'Epoch {epoch:>2}/{self.epochs:>2} | Train Loss: {train_loss:.4f} | Train Acc: {train_acc:.2f}%, LR: {self.scheduler.get_lr()[0]:.6f} | Val Loss: {val_loss:.4f} | Val Acc: {val_acc:.2f}%')
 
             if self.vit_visualizers:
                 self.model.eval()
