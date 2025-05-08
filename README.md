@@ -56,22 +56,21 @@ _Get a peek inside the ViT! All visualizations are automatically generated and c
 
 ### 📚 Sample Visualizations
 
-#### CLS <-> Token Attention
-
-![attn-from-cls](assets/attn_from_cls_s.gif)
-![attn-to-cls](assets/attn_to_cls_s.gif)
-
 #### CLS Dimensionality Reduction
 
 ![cls-heatmaps](assets/cls_dim_reduction.png)
 
-#### CLS Heatmaps
-
-![cls-heatmaps](assets/cls_heatmaps_s.gif)
-
 #### Self Attention Heads Heatmap
 
 ![cls-heatmaps](assets/attn_heads_s.gif)
+
+#### CLS <-> Token Attention
+
+![attn-cls](assets/attn_cls_s.gif)
+
+#### CLS Heatmaps
+
+![cls-heatmaps](assets/cls_heatmaps_s.gif)
 
 #### Hook Attention Maps
 
