@@ -57,8 +57,8 @@ _Get a peek inside the ViT! All visualizations are automatically generated and c
 
 #### CLS <-> Token Attention
 
-![attn-from-cls](assets/attn_from_cls.gif)
-![attn-to-cls](assets/attn_to_cls.gif)
+![attn-from-cls](assets/attn_from_cls_s.gif)
+![attn-to-cls](assets/attn_to_cls_s.gif)
 
 #### CLS Dimensionality Reduction
 
@@ -66,15 +66,15 @@ _Get a peek inside the ViT! All visualizations are automatically generated and c
 
 #### CLS Heatmaps
 
-![cls-heatmaps](assets/cls_heatmaps.gif)
+![cls-heatmaps](assets/cls_heatmaps_s.gif)
 
 #### Self Attention Heads Heatmap
 
-![cls-heatmaps](assets/attn_heads.gif)
+![cls-heatmaps](assets/attn_heads_s.gif)
 
 #### Hook Attention Maps
 
-![cls-heatmaps](assets/hook_attn_maps.gif)
+![cls-heatmaps](assets/hook_attn_maps_s.gif)
 
 ---
 
