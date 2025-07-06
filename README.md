@@ -68,14 +68,6 @@ _Get a peek inside the ViT! All visualizations are automatically generated and c
 
 ![attn-cls](assets/attn_cls_s.gif)
 
-#### CLS Heatmaps
-
-![cls-heatmaps](assets/cls_heatmaps_s.gif)
-
-#### Hook Attention Maps
-
-![cls-heatmaps](assets/hook_attn_maps_s.gif)
-
 ---
 
 ### ⚙️ Training Configuration
